@@ -1,78 +1,131 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: {{ include "payment-service.fullname" . }}
-  labels:
-    {{- include "payment-service.labels" . | nindent 4 }}
-spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
-  {{- end }}
-  selector:
-    matchLabels:
-      {{- include "payment-service.selectorLabels" . | nindent 6 }}
-  template:
-    metadata:
-      {{- with .Values.podAnnotations }}
-      annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      labels:
-        {{- include "payment-service.labels" . | nindent 8 }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-    spec:
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      serviceAccountName: {{ include "payment-service.serviceAccountName" . }}
-      {{- with .Values.podSecurityContext }}
-      securityContext:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      containers:
-        - name: {{ .Chart.Name }}
-          {{- with .Values.securityContext }}
-          securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports:
-            - name: http
-              containerPort: {{ .Values.service.port }}
-              protocol: TCP
-          {{- with .Values.livenessProbe }}
-          livenessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.readinessProbe }}
-          readinessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.resources }}
-          resources:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-      {{- with .Values.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+names:
+ service: pr-device
+ deployment: pr-device
+ namespace: dev
+ role: pr-device-reader
+ rolebinding: pr-device-reader-binding
+ serviceAccount: default
+
+
+bind:
+ rules:
+ - apiGroups: [""]
+   resources: ["services"]
+   resourceNames: ["pr-device"]
+   verbs: ["get", "watch", "list"]
+
+
+ roleRef:
+   kind: Role
+   name: pr-device-reader
+   apiGroup: rbac.authorization.k8s.io
+
+
+ application:
+ replicas: 3
+ environment: dev
+ app: pr-device
+ container:
+   name: pr-device
+   image: 59237748339.dkr.ecr.us-east-2.amazonaws.com/pr_device-dev:113
+   imagePullPolicy: Always
+   containerPort: 8082
+   protocol: TCP
+   imagePullSecrets: regcred
+   resources:
+     limits:
+       cpu: 256m
+       memory: 512Mi
+     requests:
+       cpu: 256m
+       memory: 512Mi
+ livenessProbe:
+   httpGet:
+     path: /actuator/health/liveness
+     port: 8082
+   initialDelaySeconds: 400
+   periodSeconds: 30
+   failureThreshold: 4
+   timeoutSeconds: 10
+ readinessProbe:
+   httpGet:
+     path: /actuator/health/readiness
+     port: 8082
+   initialDelaySeconds: 400
+   periodSeconds: 30
+   failureThreshold: 4
+   timeoutSeconds: 10
+ env:
+   - name: CLUSTER_NAME
+     valueFrom:
+       secretKeyRef:
+         name: dev-params
+         key: CLUSTER_NAME
+   - name: MYSQL_HOST
+     valueFrom:
+       secretKeyRef:
+         name: dev-params
+         key: MYSQL_HOST
+   - name: MYSQL_PORT
+     valueFrom:
+       secretKeyRef:
+         name: dev-params
+         key: MYSQL_PORT
+   - name: MYSQL_USER
+     valueFrom:
+       secretKeyRef:
+         name: dev-params
+         key: MYSQL_USER
+   - name: MYSQL_PASSWORD
+     valueFrom:
+       secretKeyRef:
+         name: dev-params
+         key: MYSQL_PASSWORD
+   - name: DB_NAME
+     valueFrom:
+       secretKeyRef:
+         name: dev-params
+         key: DB_NAME
+   - name: AWS_ACCESS_KEY
+     valueFrom:
+       secretKeyRef:
+         name: dev-params
+         key: AWS_ACCESS_KEY
+   - name: AWS_SECRET_KEY
+     valueFrom:
+       secretKeyRef:
+         name: dev-params
+         key: AWS_SECRET_KEY
+
+
+service:
+ type: ClusterIP
+ port: 8082
+ targetPort: 8082
+
+
+secretmanager:
+ name: dev-secret
+
+
+parameterstore:
+ name: dev-params
+#     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+#     alb.ingress.kubernetes.io/group.name: private-alb
+#     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:6655678899007:certificate/f02710c6-b33b-43a6-b43f-8cc483a9a077
+#     external-dns.alpha.kubernetes.io/hostname: pr-device-k8.dev.prophius-api.com
+#     alb.ingress.kubernetes.io/ssl-redirect: '443'
+#     alb.ingress.kubernetes.io/conditions.example: '[{"field":"hostHeader","hostHeader":{"values":["pr-device-k8.dev.prophius-api.com"]}}]'
+
+
+ # rules:
+ #   host: pr-device-k8.dev.prophius-api.com
+ #   http:
+ #     paths:
+ #       path: /
+ #       pathType: Prefix
+ #       backend:
+ #           service:
+ #             name: "pr-device"
+ #             port:
+ #               number: 8082
