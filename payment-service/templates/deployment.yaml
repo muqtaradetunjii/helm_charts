@@ -22,7 +22,7 @@ bind:
 
 
  application:
- replicas: 2
+ replicas: 3
  environment: dev
  app: pr-device
  container:
